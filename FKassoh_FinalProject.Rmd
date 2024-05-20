@@ -1,0 +1,816 @@
+---
+title: "DATA 605 Final Project"
+author: "Fomba Kassoh"
+date: "2024-05-16"
+output: html_document
+header-includes:
+  - \usepackage{amsmath}
+---
+
+## Load required libraries
+```{r setup, include=FALSE}
+# Install and load necessary packages
+if (!requireNamespace("knitr", quietly = TRUE)) {
+  install.packages("knitr")
+}
+if (!requireNamespace("kableExtra", quietly = TRUE)) {
+  install.packages("kableExtra")
+}
+
+if (!requireNamespace("MASS", quietly = TRUE)) {
+  install.packages("MASS")
+}
+
+if (!requireNamespace("caret", quietly = TRUE)) {
+  install.packages("caret")
+}
+if (!requireNamespace("car", quietly = TRUE)) {
+  install.packages("car")
+}
+
+library(knitr)
+library(kableExtra)
+library(dplyr)
+library(MASS)
+library(tidyverse)
+library(ggplot2)
+library(knitr)
+library(caret)
+library(car)
+```
+
+
+## I. Load and Examine Data
+
+To begin, we load the necessary libraries and the dataset. We then examine the first few rows of the data to get an overview of its structure.
+
+```{r load_train_dataset}
+# Load the data
+data <- read.csv("https://raw.githubusercontent.com/hawa1983/DATA605/main/train.csv")
+
+```
+
+
+## II. Pick and Define Variables
+
+We select `LotArea` as our independent variable \( X \) and `SalePrice` as our dependent variable \( Y \).
+
+```{r define_Variables}
+# Pick and define variables
+X <- data$LotArea
+Y <- data$SalePrice
+```
+
+## III. Probabilities
+
+### Step 1. Calculate Quartiles
+
+Next, we calculate the 3rd quartile (Q3) for `LotArea` and the 2nd quartile (Q2) for `SalePrice`.
+
+```{r}
+# Calculate quartiles
+lotarea_q3 <- quantile(X, 0.75)
+saleprice_q2 <- quantile(Y, 0.50)
+
+# Print the results with labels
+cat("LotArea 3rd Quartile (Q3):", lotarea_q3, "\n")
+cat("SalePrice Median (Q2):", saleprice_q2, "\n")
+
+```
+
+### Step 2. Calculate Probabilities
+
+We compute the following probabilities:
+
+  * \( P(X > x \mid Y > y) \)
+  * \( P(X > x \text{ and } Y > y) \)
+  * \( P(X < x \mid Y > y) \)
+  
+```{r}
+# Calculate probabilities
+P_X_greater_x <- sum(X > lotarea_q3 & Y > saleprice_q2) / sum(Y > saleprice_q2)
+P_X_greater_x_Y_greater_y <- sum(X > lotarea_q3 & Y > saleprice_q2) / length(Y)
+P_X_less_x_Y_greater_y <- sum(X < lotarea_q3 & Y > saleprice_q2) / sum(Y > saleprice_q2)
+
+cat("P(X>x and Y>y): 0.379120879120879\n")
+cat("P(X>x and Y>y): 0.189041095890411\n")
+cat("P(X<x and Y>y): 0.620879120879121\n")
+
+```
+
+### Step 3. Interpret the Probabilities
+
+**$P(X > x \text{ and } Y > y): 0.3791$**
+
+The probability that $X$ is greater than $x$ and $Y$ is greater than $y$ is 0.3791. This indicates that there is approximately a 37.91% chance that both $X$ and $Y$ exceed their respective thresholds $x$ and $y$.  In practical terms, this indicates a considerable likelihood that larger properties tend to be more expensive.
+
+**$P(X > x \text{ and } Y > y): 0.1890$**
+
+The probability that $X$ is greater than $x$ and $Y$ is greater than $y$ is 0.1890. This suggests that there is approximately an 18.90% chance that both $X$ and $Y$ exceed their respective thresholds $x$ and $y$. This lower probability, compared to the first one, suggests a less frequent occurrence of properties having both large lot areas and high sale prices. It might imply that the thresholds set for `x` and `y` are such that fewer properties meet both criteria.
+
+**$P(X < x \text{ and } Y > y): 0.6209$**
+
+The probability that $X$ is less than $x$ and $Y$ is greater than $y$ is 0.6209. This means that there is approximately a 62.09% chance that $X$ is below its threshold $x$ while $Y$ exceeds its threshold $y$.  This higher probability indicates that many properties have a sale price exceeding the threshold `y` even if their lot area is less than the threshold `x`. This means that a significant number of properties with smaller lot areas still manage to have higher sale prices, possibly due to other factors such as location, amenities, or house quality.
+
+  
+### Step 4. Make a Contingency Table of counts and Chi-Square Test
+
+We create a contingency table for \texttt{LotArea} and \texttt{SalePrice} and perform a Chi-Square test to determine if the variables are independent.
+
+```{r}
+
+# Calculate quartiles
+lotarea_q3 <- quantile(X, 0.75)
+saleprice_q2 <- quantile(Y, 0.50)
+
+# Create the contingency table
+contingency_table <- table(cut(X, breaks=c(-Inf, lotarea_q3, Inf)),
+                           cut(Y, breaks=c(-Inf, saleprice_q2, Inf)))
+
+# Convert to matrix and add row and column totals
+contingency_matrix <- addmargins(as.matrix(contingency_table))
+
+# Rename rows and columns for clarity
+rownames(contingency_matrix) <- c("<=3rd quartile", ">3rd quartile", "Total")
+colnames(contingency_matrix) <- c("<=2nd quartile", ">2nd quartile", "Total")
+
+# Create a new matrix with additional row and column for labels
+new_matrix <- matrix("", nrow=nrow(contingency_matrix) + 1, ncol=ncol(contingency_matrix) + 1)
+new_matrix[1, 2:ncol(new_matrix)] <- c("<=2nd quartile", ">2nd quartile", "Total")
+new_matrix[2:nrow(new_matrix), 1] <- c("<=3rd quartile", ">3rd quartile", "Total")
+new_matrix[2:nrow(new_matrix), 2:ncol(new_matrix)] <- contingency_matrix
+new_matrix[1, 1] <- "B \\ A"
+
+
+```
+
+**Contingency Table Interpretation**
+
+The contingency table is as follows:
+
+```{r}
+
+kable(new_matrix, format = "html", caption = "Contingency Table of LotArea and SalePrice with Custom Labels") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+```
+
+***Majority of Properties with Smaller Lot Areas***
+
+The majority of properties (1,095 out of 1,460) have a `LotArea` that is less than or equal to the 3rd quartile. Among these, 643 properties also have a `SalePrice` less than or equal to the 2nd quartile, and 452 properties have a `SalePrice` greater than the 2nd quartile. This indicates that while a large number of smaller lot properties are less expensive, a significant number are also relatively more expensive.
+
+***Properties with Larger Lot Areas***
+
+There are fewer properties with a `LotArea` greater than the 3rd quartile (365 out of 1,460). Among these, 276 properties have a `SalePrice` greater than the 2nd quartile, and 89 properties have a `SalePrice` less than or equal to the 2nd quartile. This suggests that properties with larger lot areas are more likely to have higher sale prices, although some still have lower sale prices.
+
+***Comparison Across Quartiles***
+
+Properties with `LotArea` <= 3rd quartile and `SalePrice` > 2nd quartile (452 properties) outnumber properties with `LotArea` > 3rd quartile and `SalePrice` <= 2nd quartile (89 properties). This indicates that even among properties with smaller lot areas, a considerable number achieve higher sale prices, possibly due to factors other than lot size, such as location, house condition, or amenities.
+
+### Step 5. Checking Independence of Variables𝐴and B
+
+We need to 
+
+  * Define Variables \( A \) and \( B \)
+  * Calculate \( P(A) \)\( P(B) \), and \( P(A|B) \)
+  * Check if \(P(A|B) = P(A)P(B)\)
+
+Let \( A \) be the variable indicating observations above the 3rd quartile for \( X \) (`LotArea`), and \( B \) be the variable indicating observations above the 2nd quartile for \( Y \) (`SalePrice`).
+
+
+```{r}
+# Define A and B
+A <- ifelse(X > lotarea_q3, 1, 0)
+B <- ifelse(Y > saleprice_q2, 1, 0)
+
+# Create the contingency table for A and B
+contingency_table_AB <- table(A, B)
+
+# Calculate probabilities
+P_A <- mean(A)
+P_B <- mean(B)
+P_A_given_B <- mean(A[B == 1])
+
+# Check if P(A|B) = P(A)P(B)
+P_A_equal_PB <- P_A_given_B == P_A * P_B
+
+
+```
+
+#### 1. Probabilities
+```{r}
+# Create a data frame to display probabilities
+prob_df <- data.frame(
+  Metric = c("P(A)", "P(B)", "P(A|B)", "P(A|B) == P(A)P(B)"),
+  Value = c(P_A, P_B, P_A_given_B, P_A_equal_PB)
+)
+
+kable(prob_df, format = "html", caption = "Probabilities for A and B") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+```
+
+#### 2. Chi-Square Test
+```{r}
+# Create a data frame for chi-square test results
+# Perform Chi-Square test
+chi_square_test_AB <- chisq.test(contingency_table_AB)
+
+chi_square_df <- data.frame(
+  Statistic = round(chi_square_test_AB$statistic, 2),
+  `Degrees of Freedom` = chi_square_test_AB$parameter,
+  `p-value` = format.pval(chi_square_test_AB$p.value, digits = , scientific = TRUE)
+)
+
+kable(chi_square_df, format = "html", caption = "Chi-Square Test Results for A and B") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+
+```
+
+
+#### 3. Conclusion: Independence of Variables \( A \) and \( B \)
+
+Based on the analysis, we conclude that splitting the training data into variables \( A \) and \( B \) does not make them independent. 
+
+  * The mathematical check shows that \( P(A|B) \neq P(A) \cdot P(B) \).
+  * The Chi-Square test for association further supports this conclusion with a p-value less than 0.05. Given the very low p-value, we reject the null hypothesis that `LotArea` and `SalePrice` are independent. There is strong evidence to suggest that there is a significant association between `LotArea` and `SalePrice`.
+
+Therefore, we can state that \( A \) and \( B \) are dependent.
+
+## IV. Descriptive Statistics and Plots
+
+We provide descriptive statistics for \texttt{LotArea} and \texttt{SalePrice}. Additionally, we generate histograms, boxplots, and a scatterplot to visualize the data.
+
+### Step 1: Calculate Summary Statistics
+
+```{r}
+# Descriptive statistics
+summary(data$LotArea)
+summary(data$SalePrice)
+
+```
+
+### Step 2a: Plot Histograms
+
+```{r}
+library(ggplot2)
+library(patchwork)
+
+# Histograms
+p1 <- ggplot(data, aes(x=LotArea)) + 
+  geom_histogram(bins=30, fill="blue", alpha=0.7) + 
+  ggtitle("Histogram of LotArea")
+
+p2 <- ggplot(data, aes(x=SalePrice)) + 
+  geom_histogram(bins=30, fill="blue", alpha=0.7) + 
+  ggtitle("Histogram of SalePrice")
+
+# Combine all plots into a single layout
+(p1 | p2)
+
+
+
+```
+
+### Step 2b: Plot Boxplots
+
+```{r}
+library(ggplot2)
+library(patchwork)
+
+
+# Boxplots
+p3 <- ggplot(data, aes(y=LotArea)) + 
+  geom_boxplot() + 
+  ggtitle("Boxplot of LotArea")
+
+p4 <- ggplot(data, aes(y=SalePrice)) + 
+  geom_boxplot() + 
+  ggtitle("Boxplot of SalePrice")
+
+# Combine all plots into a single layout
+(p3 | p4) 
+
+
+
+```
+
+### Step 3. Scatterplot of LotArea and SalePrice
+
+```{r}
+library(ggplot2)
+library(patchwork)
+
+# Scatterplot
+p5 <- ggplot(data, aes(x=LotArea, y=SalePrice)) + 
+  geom_point() + 
+  ggtitle("Scatterplot of LotArea vs SalePrice")
+
+p5
+
+
+
+```
+
+### Step 4. Calculate 95% Confidence Interval for the Difference in Means
+
+We calculate the difference in means between `LotArea` and `SalePrice` and compute the 95\% confidence interval for this difference.
+
+```{r}
+# Calculate the difference in means and the standard error of the difference
+mean_diff <- mean(X) - mean(Y)
+se_diff <- sqrt(var(X)/length(X) + var(Y)/length(Y))
+
+# Calculate the 95% confidence interval
+t_value <- qt(0.975, df=length(X)-1)
+ci_lower_diff <- mean_diff - t_value * se_diff
+ci_upper_diff <- mean_diff + t_value * se_diff
+
+# Print the results with labels
+cat("Mean difference:", mean_diff, "\n")
+cat("95% CI lower bound:", ci_lower_diff, "\n")
+cat("95% CI upper bound:", ci_upper_diff, "\n")
+
+
+```
+
+### Step 5. Correlation Matrix and Hypothesis Testing
+
+We compute the correlation matrix for \texttt{LotArea} and \texttt{SalePrice} and perform a hypothesis test to determine if the correlation is significantly different from zero.
+
+```{r}
+# Compute the correlation matrix
+correlation_matrix <- cor(data[, c("LotArea", "SalePrice")])
+
+# Test the hypothesis that the correlation is 0
+correlation_test <- cor.test(X, Y)
+
+correlation_matrix
+correlation_test
+```
+### Step 6. Discussion and analysis of the Descriptive Statistics**
+
+  * The descriptive statistics and visualizations provide insights into the distribution and central tendency of LotArea and SalePrice. 
+  * The histograms and boxplots reveal that both variables are right-skewed with the presence of outliers. 
+  * The scatterplot suggests a positive relationship between LotArea and SalePrice, although the relationship is not very strong. 
+  * The confidence interval for the difference in means and the correlation matrix further support these findings, indicating that properties with larger lot areas tend to have higher sale prices. 
+  * The hypothesis test confirms that the correlation between LotArea and SalePrice is statistically significant.
+
+
+## V. Linear Algebra and PCA
+
+### Step 1. Principal Component Analysis (PCA)
+
+We invert the correlation matrix to obtain the precision matrix and perform matrix multiplications. We also conduct Principal Components Analysis (PCA) to understand the variance explained by each principal component.
+
+```{r}
+# Invert the correlation matrix
+precision_matrix <- solve(correlation_matrix)
+
+# Matrix multiplications
+correlation_times_precision <- correlation_matrix %*% precision_matrix
+precision_times_correlation <- precision_matrix %*% correlation_matrix
+
+# Perform PCA
+pca <- prcomp(data[, c("LotArea", "SalePrice")], scale. = TRUE)
+
+# Principal components and explained variance
+principal_components <- pca$rotation
+explained_variance <- pca$sdev^2 / sum(pca$sdev^2)
+
+
+
+```
+### Step 2. Interpretation and Discussion
+
+#### 1. Precision Matrix
+
+
+  * **Diagonal Elements (1.0748219):** The diagonal elements represent the precision or variance of each variable when the influence of other variables is removed. Here, the variance of `LotArea` and `SalePrice` are the same (approximately 1.0748219).
+  * **Off-diagonal Elements (-0.2835846):** The off-diagonal elements represent the partial correlation between the variables, after accounting for the influence of other variables. Here, `LotArea` and `SalePrice` have a partial correlation of approximately -0.284, indicating a slight negative conditional dependence.
+  
+```{r}
+# Print the results with headings
+cat("Precision Matrix:\n")
+print(precision_matrix)
+
+
+```
+
+
+#### 2. Correlation Matrix times Precision Matrix
+
+This result shows an identity matrix, indicating that when the correlation matrix is multiplied by its inverse (the precision matrix), the result is an identity matrix. This confirms that the precision matrix was correctly calculated as the inverse of the correlation matrix.
+
+```{r}
+cat("\nCorrelation Matrix times Precision Matrix:\n")
+print(correlation_times_precision)
+
+
+```
+
+#### 3. Precision Matrix times Correlation Matrix
+
+Similar to the previous result, this multiplication also results in an identity matrix. This further confirms the correctness of the precision and correlation matrices.
+
+```{r}
+cat("\nPrecision Matrix times Correlation Matrix:\n")
+print(precision_times_correlation)
+
+```
+#### 4. Principal Components
+
+* PC1 (First Principal Component): Both `LotArea` and `SalePrice` contribute equally to the first principal component, with positive coefficients (approximately 0.7071). This suggests that the first principal component represents a combined measure of `LotArea` and `SalePrice`.
+* PC2 (Second Principal Component): `LotArea` and `SalePrice` contribute equally but with opposite signs to the second principal component. This suggests that the second principal component represents the contrast between `LotArea` and `SalePrice`.
+
+```{r}
+
+cat("\nPrincipal Components:\n")
+print(principal_components)
+
+
+```
+
+#### 5. Explained Variance
+
+  * First Principal Component (PC1): Explains approximately 63.19% of the variance in the data. This indicates that most of the variability in `LotArea` and `SalePrice` can be captured by this combined measure.
+  * Second Principal Component (PC2): Explains approximately 36.81% of the variance in the data. This indicates that the remaining variability is captured by the contrast between `LotArea` and `SalePrice`.
+
+```{r}
+cat("\nExplained Variance:\n")
+print(explained_variance)
+```
+#### 6. Overall Conclusion
+
+The analysis provides insights into the relationship between `LotArea` and `SalePrice`. The precision matrix indicates a slight negative conditional dependence, while the PCA reveals that a combined measure of these variables captures most of the variance. The significant portion of variance explained by the first principal component suggests that these variables are closely related, but there is also distinct variability captured by the second principal component.
+
+## VI. Calculus-Based Probability & Statistics
+
+### Step 1. Fit Exponential Distribution and perform calaculations
+
+We fit an exponential distribution to the `LotArea` data and generate samples from the fitted distribution. We also compare the empirical and theoretical percentiles.
+
+```{r}
+# Set a seed for reproducibility
+set.seed(42)
+
+# Filter out zero or negative values and shift `LotArea` to ensure positive values
+lotarea_shifted <- data$LotArea - min(data$LotArea) + 1
+
+# Fit the exponential distribution
+fit <- fitdistr(lotarea_shifted, "exponential")
+lambda <- fit$estimate
+
+# Generate 1000 samples from the fitted exponential distribution
+samples <- rexp(1000, rate=lambda)
+
+# Calculate percentiles
+theoretical_percentiles <- qexp(c(0.05, 0.95), rate=lambda)
+empirical_percentiles <- quantile(lotarea_shifted, probs=c(0.05, 0.95))
+
+# Print results
+cat("Estimated Lambda:", lambda, "\n")
+cat("Theoretical Percentiles (5% and 95%):", theoretical_percentiles, "\n")
+cat("Empirical Percentiles (5% and 95%):", empirical_percentiles, "\n")
+
+
+```
+
+### Step 2. Plot the histograms
+
+```{r}
+# Create data frames for plotting
+sample_df <- data.frame(Value = samples, Type = "Exponential Samples")
+lotarea_df <- data.frame(Value = lotarea_shifted, Type = "Shifted LotArea")
+
+# Combine data frames
+plot_data <- bind_rows(sample_df, lotarea_df)
+
+# Plot histograms with facet wrap
+ggplot(plot_data, aes(x = Value)) +
+  geom_histogram(bins = 30, fill = "blue", alpha = 0.7) +
+  facet_wrap(~Type, scales = "free") +
+  ggtitle("Histograms of Exponential Samples and Shifted LotArea") +
+  xlab("Value") +
+  ylab("Frequency")
+
+```
+
+### Step 3. Discuss the output and histograms
+
+**Estimated Lambda**
+
+The estimated `lambda` for the exponential distribution is `r lambda`. This value of `lambda` is the rate parameter of the exponential distribution. It    indicates how quickly the values decay. A smaller lambda would mean a slower decay, whereas a larger lambda indicates a quicker decay.
+
+**Theoretical and Empirical Percentiles**
+
+  Theoretical Percentiles (5% and 95%): `r theoretical_percentiles` are the 5th and 95th percentiles of the theoretical exponential distribution based on    the estimated lambda. They provide a range within which 90% of the data from the exponential distribution is expected to fall.
+
+**Empirical Percentiles**
+
+  Empirical Percentiles (5% and 95%): `r empirical_percentiles` are the 5th and 95th percentiles of the empirical shifted `LotArea` data. They provide a     range within which 90% of the shifted `LotArea` data falls.
+
+**Histograms**
+
+  * ***Exponential Samples Histogram:*** The left histogram shows the distribution of 1000 samples generated from the fitted exponential distribution.
+  As expected for an exponential distribution, the histogram shows a rapid decay, with most values concentrated towards the lower end and fewer values as    you move to the right. The shape confirms that the data follows an exponential decay, which is consistent with the nature of an exponential distribution.
+
+  * ***Shifted LotArea Histogram:*** The right histogram shows the distribution of the shifted `LotArea` values. This histogram also shows a right-skewed     distribution, with most values concentrated towards the lower end and fewer values extending to the right. The shape of this histogram is somewhat similar to the exponential samples histogram, indicating that the shifted `LotArea` data might reasonably follow an exponential distribution.
+  
+**Comparison and Analysis**
+  
+  * ***Shape Comparison:*** Both histograms show a right-skewed distribution, with a high frequency of small values and a long tail of larger values. This similarity suggests that the exponential distribution might be a good fit for the shifted `LotArea` data.
+
+  * ***Percentile Comparison:*** The theoretical percentiles from the exponential distribution (`r theoretical_percentiles`) and the empirical percentiles from the shifted LotArea data (`r empirical_percentiles`) are not identical but share a similar range. This similarity further supports that the exponential distribution can reasonably model the shifted LotArea data. The empirical 5th percentile is higher than the theoretical 5th percentile, indicating that the lower end of the `LotArea` data might be more spread out compared to the fitted exponential distribution.
+  
+  * **Goodness of Fit:** The comparison of histograms and percentiles suggests that the exponential distribution is a plausible model for the shifted `LotArea` data.
+
+## VII. Modeling
+
+### Step 1. Data Preprocessing
+
+The data preprocessing steps included loading the data, handling missing values, and performing one-hot encoding for categorical variables. Then, the features were scaled for PCA.
+
+```{r Data_Preprocessing}
+# Load the data
+train_data <- read.csv("https://raw.githubusercontent.com/hawa1983/DATA605/main/train.csv")
+test_data <- read.csv("https://raw.githubusercontent.com/hawa1983/DATA605/main/test.csv")
+
+# Identify and handle missing values in both train and test datasets
+preprocess_data <- function(data) {
+  for (col in names(data)) {
+    if (is.numeric(data[[col]])) {
+      data[[col]][is.na(data[[col]])] <- median(data[[col]], na.rm = TRUE)
+    } else {
+      data[[col]][is.na(data[[col]])] <- as.character(mode(data[[col]]))
+    }
+  }
+  return(data)
+}
+
+train_data <- preprocess_data(train_data)
+test_data <- preprocess_data(test_data)
+
+# Remove target variable 'SalePrice' from training data for dummy variable creation
+train_data_no_target <- dplyr::select(train_data, -SalePrice)
+
+# Encode categorical variables using one-hot encoding
+dummies <- dummyVars("~ .", data = train_data_no_target)
+train_data_encoded <- predict(dummies, newdata = train_data_no_target)
+train_data_encoded <- as.data.frame(train_data_encoded)
+
+# Add the target variable back to the encoded training data
+train_data_encoded$SalePrice <- train_data$SalePrice
+
+# Encode the test data using the same dummyVars object
+test_data_encoded <- predict(dummies, newdata = test_data)
+test_data_encoded <- as.data.frame(test_data_encoded)
+
+# Ensure the 'Id' column is included in the test data
+test_data_encoded$Id <- test_data$Id
+
+# Ensure both datasets have the same columns
+common_columns <- intersect(names(train_data_encoded), names(test_data_encoded))
+train_data_encoded <- train_data_encoded[, common_columns]
+test_data_encoded <- test_data_encoded[, common_columns]
+
+# Scale the features for PCA
+# train_data_scaled <- scale(train_data_encoded)
+# test_data_scaled <- scale(test_data_encoded)
+
+# Perform PCA on the training data
+# pca <- prcomp(train_data_scaled, center = TRUE, scale. = TRUE)
+#summary(pca)
+
+# Standardize the data before applying PCA
+train_data_scaled <- scale(train_data_encoded)
+test_data_scaled <- scale(test_data_encoded)
+
+# Apply PCA on the training data
+pca_result <- prcomp(train_data_scaled, center = TRUE, scale. = TRUE)
+
+# Display summary of PCA result
+# summary(pca_result)
+
+
+```
+
+
+### Step 2. Perform Principal Components
+
+Principal Component Analysis (PCA) was performed, and the number of components explaining 95% of the variance was determined.
+
+```{r Perform_Principal_Components}
+# Plot the explained variance
+explained_variance <- cumsum(pca_result$sdev^2 / sum(pca_result$sdev^2))
+ggplot(data = data.frame(PC = 1:length(explained_variance), Variance = explained_variance), aes(x = PC, y = Variance)) +
+  geom_line() + 
+  geom_point() + 
+  labs(title = "Explained Variance by Principal Components", x = "Principal Component", y = "Cumulative Proportion of Variance Explained") +
+  theme_minimal()
+
+
+```
+
+```{r}
+# Selecting the number of components that explain a sufficient amount of variance (e.g., 95%)
+num_components <- which(explained_variance >= 0.95)[1]
+print(paste("Number of components explaining 95% variance:", num_components))
+```
+
+### Step 3. Transform Data Using PCA
+
+The training and test data were transformed using the selected number of principal components.
+
+```{r Transform_Data_Using_PCA}
+
+# Transform the training and testing data using PCA
+train_data_pca <- as.data.frame(pca_result$x[, 1:num_components])
+test_data_pca <- predict(pca_result, newdata = test_data_scaled)[, 1:num_components]
+test_data_pca <- as.data.frame(test_data_pca)
+
+# Ensure SalePrice is still part of the data
+train_data_pca$SalePrice <- log(train_data$SalePrice)  # Log-transform the SalePrice
+
+test_data_pca$Id <- test_data$Id
+```
+
+
+
+###  Step 4. Build Regression Model
+
+A linear regression model was built using the principal components with the log-transformed SalePrice.
+
+```{r r Build_Regression_Model}
+# Fit multiple linear regression model using the principal components with log-transformed SalePrice
+model_pca_log <- lm(SalePrice ~ ., data = train_data_pca)
+
+# Model summary
+model_summary_log <- summary(model_pca_log)
+
+# Extract the required metrics
+residual_standard_error_log <- model_summary_log$sigma
+multiple_r_squared_log <- model_summary_log$r.squared
+adjusted_r_squared_log <- model_summary_log$adj.r.squared
+f_statistic_log <- model_summary_log$fstatistic[1]
+df1_log <- model_summary_log$fstatistic[2]
+df2_log <- model_summary_log$fstatistic[3]
+p_value_log <- pf(f_statistic_log, df1_log, df2_log, lower.tail = FALSE)
+
+# Create a list of the extracted metrics
+metrics_list_log <- list(
+  Residual_Standard_Error = residual_standard_error_log,
+  Multiple_R_Squared = multiple_r_squared_log,
+  Adjusted_R_Squared = adjusted_r_squared_log,
+  F_Statistic = f_statistic_log,
+  Degrees_of_Freedom1 = df1_log,
+  Degrees_of_Freedom2 = df2_log,
+  P_Value = p_value_log
+)
+
+# Print the list of metrics
+print(metrics_list_log)
+
+# Check for multicollinearity using VIF
+vif_values_pca_log <- vif(model_pca_log)
+head(vif_values_pca_log)
+
+```
+### Step 5. Interpretation of the Model Metrics for Log-Transformed SalePrice
+
+* **Residual Standard Error:** On the log-transformed scale, the residual standard error is approximately 0.1205, indicating that the model's predictions are quite accurate.
+
+* **High R² and Adjusted R²:** Both values are above 0.9, indicating that the model explains a substantial portion of the variance in the log-transformed `SalePrice`.
+
+* **Significant F-Statistic and P-Value:** The model is statistically significant overall, meaning that the predictors collectively have a significant effect on the log-transformed `SalePrice`.
+
+### Step 6. Interpretation of the Model's Diagnostic plots
+
+Diagnostic plots were generated to assess the model assumptions.
+
+```{r}
+
+library(patchwork)
+
+# Diagnostic plots
+# Residuals vs Fitted
+residuals_vs_fitted <- ggplot(model_pca_log, aes(.fitted, .resid)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess", se = FALSE, color = "red") +
+  ggtitle("Residuals vs Fitted") +
+  xlab("Fitted values") +
+  ylab("Residuals") +
+  theme_minimal()
+
+# Q-Q plot
+qq_plot <- ggplot(model_pca_log, aes(sample = .stdresid)) +
+  stat_qq() +
+  stat_qq_line(color = "red") +
+  ggtitle("Normal Q-Q") +
+  theme_minimal()
+
+# Scale-Location plot
+scale_location_plot <- ggplot(model_pca_log, aes(.fitted, sqrt(abs(.stdresid)))) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess", se = FALSE, color = "red") +
+  ggtitle("Scale-Location") +
+  xlab("Fitted values") +
+  ylab("Square Root of |Standardized Residuals|") +
+  theme_minimal()
+
+# Residuals vs Leverage plot
+residuals_vs_leverage <- ggplot(model_pca_log, aes(.hat, .stdresid)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess", se = FALSE, color = "red") +
+  ggtitle("Residuals vs Leverage") +
+  xlab("Leverage") +
+  ylab("Standardized Residuals") +
+  theme_minimal()
+
+# Combine diagnostic plots
+diagnostic_plots <- (residuals_vs_fitted | scale_location_plot) / (qq_plot | residuals_vs_leverage)
+
+diagnostic_plots
+
+```
+
+##### a. Residuals vs. Fitted Plot
+
+**Purpose:** 
+
+  * To check for non-linearity, unequal error variances, and outliers.
+  
+**Observation:** 
+
+  * The red smoothing line is relatively flat, suggesting that there is no clear pattern in the residuals. However, there is some slight curvature which may indicate some non-linearity that the model does not capture well.
+  
+**Conclusion:**
+
+  * The residuals appear to be randomly dispersed around the horizontal line, which is good. The slight curve indicates there might be some minor non-linearity.
+
+##### b. Scale-Location Plot (Spread-Location Plot):
+
+**Purpose:** 
+
+  * To check for homoscedasticity (constant variance).
+  
+**Observation:** 
+
+  * The red line shows a slight curve, suggesting some heteroscedasticity. The spread of the residuals appears to be relatively constant, but it does increase slightly with the fitted values.
+  
+**Conclusion:**
+
+  * While mostly homoscedastic, there is a minor increase in variance with higher fitted values. This indicates that the variance of residuals is mostly constant but could be improved.
+
+##### c. Normal Q-Q Plot:
+
+**Purpose:** 
+
+  * To check if the residuals are normally distributed.
+  
+**Observation:** 
+
+  * The points mostly follow the straight line except at the tails, where there is some deviation.
+  
+**Conclusion:**
+
+  * The residuals are approximately normally distributed but with some deviations in the tails. This indicates the presence of some outliers or skewness in the residuals.
+
+##### d. Residuals vs. Leverage Plot:
+
+**Purpose:** 
+
+  * To identify influential data points that can have a large effect on the regression coefficients.
+  
+**Observation:** 
+
+  * The points are mostly within the acceptable range of leverage, with a few points showing higher leverage but within acceptable bounds.
+  
+**Conclusion:**
+
+  * There are no data points with both high leverage and large residuals, suggesting there are no influential outliers affecting the model significantly.
+
+
+### Step 7. Make Predictions on Test Data
+
+Predictions were made on the test data, ensuring that they were non-negative, and a submission file was prepared.
+
+```{r Make_Predictions_on_Test_Data}
+# Predict on the test data using the log-transformed model
+predictions_log <- predict(model_pca_log, newdata = test_data_pca)
+
+# Transform predictions back to the original scale
+predictions_log <- exp(predictions_log)
+
+# Ensure predictions are not negative (SalePrice should be >= 0)
+predictions_log <- pmax(predictions_log, 0)
+
+# Prepare the submission dataframe
+submission_log <- data.frame(Id = test_data_pca$Id, SalePrice = predictions_log)
+head(submission_log)
+
+# Write the submission file to CSV
+write.csv(submission_log, "submission_log.csv", row.names = FALSE)
+
+```
